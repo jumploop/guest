@@ -32,7 +32,7 @@ def login_action(request):
 
 
 # 发布会管理
-@login_required
+# @login_required
 def event_manage(request):
     # username = request.COOKIES.get('user', '')  # 读取浏览器 cookie
     event_list = Event.objects.all()
@@ -41,7 +41,7 @@ def event_manage(request):
 
 
 # 发布会名称搜索
-@login_required
+# @login_required
 def search_name(request):
     username = request.session.get('user', '')
     search_name = request.GET.get("name", "")
@@ -50,7 +50,7 @@ def search_name(request):
 
 
 # 嘉宾管理
-@login_required
+# @login_required
 def guest_manage(request):
     username = request.session.get('user', '')
     guest_list = Guest.objects.all().order_by("id")
@@ -65,6 +65,31 @@ def guest_manage(request):
         # If page is out of range (e.g. 9999), deliver last page of results.
         contacts = paginator.page(paginator.num_pages)
     return render(request, "guest_manage.html", {"user": username, "guests": contacts})
+
+
+# 嘉宾手机号的查询
+@login_required
+def search_phone(request):
+    username = request.session.get('username', '')
+    search_phone = request.GET.get("phone", "")
+    guests = Guest.objects.filter(phone__contains=search_phone)
+    if len(guests) == 0:
+        return render(request, "guest_manage.html", {"user": username,
+                                                     "hint": "根据输入的 `手机号码` 查询结果为空！"})
+    paginator = Paginator(guests, 5)  # 少于5条数据不够分页会产生警告
+    page = request.GET.get('page')
+    try:
+        contacts = paginator.page(page)
+    except PageNotAnInteger:
+        # If page is not an integer, deliver first page.
+        contacts = paginator.page(1)
+    except EmptyPage:
+        # If page is out of range (e.g. 9999), deliver last page of results.
+        contacts = paginator.page(paginator.num_pages)
+
+    return render(request, "guest_manage.html", {"user": username,
+                                                 "guests": contacts,
+                                                 "phone": search_phone})
 
 
 @login_required
@@ -98,5 +123,3 @@ def logout(request):
     auth.logout(request)  # 退出登录
     response = HttpResponseRedirect('/index/')
     return response
-
-
