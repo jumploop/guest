@@ -7,7 +7,7 @@ from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 
 
 # Create your views here.
-
+# 首页
 def index(request):
     # return HttpResponse("Hello Django!")
     return render(request, 'index.html')
@@ -15,20 +15,24 @@ def index(request):
 
 # 登录动作
 def login_action(request):
-    if request.method == 'POST':
-        username = request.POST.get('username', '')
-        password = request.POST.get('password', '')
-        user = auth.authenticate(username=username, password=password)
-        if user is not None:
-            # if username == 'admin' and password == 'admin123':
-            # return HttpResponse('login success!')
-            auth.login(request, user)  # 登录
-            # response.set_cookie('user', username, 3600)  # 添加浏览器 cookie
-            request.session['user'] = username  # 将 session 信息记录到浏览器
-            response = HttpResponseRedirect('/event_manage/')
-            return response
+    if request.method == "POST":
+        login_username = request.POST.get("username")
+        login_password = request.POST.get("password")
+        if login_username == '' or login_password == '':
+            return render(request, "index.html", {"error": "username or password null"})
         else:
-            return render(request, 'index.html', {'error': 'username or password error!'})
+            user = auth.authenticate(
+                username=login_username, password=login_password)
+            if user is not None:
+                auth.login(request, user)  # 验证登录
+                response = HttpResponseRedirect('/event_manage/')
+                # response.set_cookie('user',login_username, 3600)
+                request.session['user'] = login_username  # 将 session 信息记录到浏览器
+                return response
+            else:
+                return render(request, "index.html", {"error": "username or password error"})
+    else:
+        return render(request, "index.html")
 
 
 # 发布会管理
@@ -45,8 +49,11 @@ def event_manage(request):
 def search_name(request):
     username = request.session.get('user', '')
     search_name = request.GET.get("name", "")
-    event_list = Event.objects.filter(name__contains=search_name)
-    return render(request, "event_manage.html", {"user": username, "events": event_list})
+    events = Event.objects.filter(name__contains=search_name)
+    if len(events) == 0:
+        return render(request, "event_manage.html", {"user": username,
+                                                     "hint": "根据输入的 `发布会名称` 查询结果为空！"})
+    return render(request, "event_manage.html", {"user": username, "events": events})
 
 
 # 嘉宾管理
@@ -68,7 +75,7 @@ def guest_manage(request):
 
 
 # 嘉宾手机号的查询
-@login_required
+# @login_required
 def search_phone(request):
     username = request.session.get('username', '')
     search_phone = request.GET.get("phone", "")
@@ -99,7 +106,7 @@ def sign_index(request, event_id):
 
 
 # 签到动作
-@login_required
+# @login_required
 def sign_index_action(request, event_id):
     event = get_object_or_404(Event, id=event_id)
     phone = request.POST.get('phone', '')
