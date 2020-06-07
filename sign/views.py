@@ -2,6 +2,8 @@ from django.shortcuts import render, get_object_or_404
 from django.http import HttpResponse, HttpResponseRedirect
 from django.contrib import auth
 from django.contrib.auth.decorators import login_required
+
+from sign.forms import AddEventForm, AddGuestForm
 from sign.models import Event, Guest
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 
@@ -36,16 +38,16 @@ def login_action(request):
 
 
 # 发布会管理
-# @login_required
+@login_required
 def event_manage(request):
     # username = request.COOKIES.get('user', '')  # 读取浏览器 cookie
-    event_list = Event.objects.all()
+    events = Event.objects.all()
     username = request.session.get('user', '')  # 读取浏览器 session
-    return render(request, "event_manage.html", {'user': username, 'events': event_list})
+    return render(request, "event_manage.html", {'user': username, 'events': events})
 
 
 # 发布会名称搜索
-# @login_required
+@login_required
 def search_name(request):
     username = request.session.get('user', '')
     search_name = request.GET.get("name", "")
@@ -56,12 +58,39 @@ def search_name(request):
     return render(request, "event_manage.html", {"user": username, "events": events})
 
 
+# 添加发布会
+def add_event(request):
+    username = request.session.get('user', '')
+
+    if request.method == 'POST':
+        form = AddEventForm(request.POST)  # form 包含提交的数据
+        if form.is_valid():
+            name = form.cleaned_data['name']
+            address = form.cleaned_data['address']
+            limit = form.cleaned_data['limit']
+            start_time = form.cleaned_data['start_time']
+            status = form.cleaned_data['status']
+            if status is True:
+                status = 1
+            else:
+                status = 0
+
+            Event.objects.create(
+                name=name, limit=limit, address=address, status=status, start_time=start_time)
+            return render(request, "add_event.html", {"user": username, "form": form, "success": "添加发布会成功!"})
+
+    else:
+        form = AddEventForm()
+
+    return render(request, "add_event.html", {"user": username, "form": form})
+
+
 # 嘉宾管理
-# @login_required
+@login_required
 def guest_manage(request):
     username = request.session.get('user', '')
-    guest_list = Guest.objects.all().order_by("id")
-    paginator = Paginator(guest_list, 2)
+    guests = Guest.objects.all().order_by("id")
+    paginator = Paginator(guests, 5)
     page = request.GET.get('page')
     try:
         contacts = paginator.page(page)
@@ -74,8 +103,36 @@ def guest_manage(request):
     return render(request, "guest_manage.html", {"user": username, "guests": contacts})
 
 
+# 添加嘉宾
+def add_guest(request):
+    username = request.session.get('user', '')
+
+    if request.method == 'POST':
+        form = AddGuestForm(request.POST)
+
+        if form.is_valid():
+            event = form.cleaned_data['event']
+            realname = form.cleaned_data['realname']
+            phone = form.cleaned_data['phone']
+            email = form.cleaned_data['email']
+            sign = form.cleaned_data['sign']
+            if sign is True:
+                sign = 1
+            else:
+                sign = 0
+
+            Guest.objects.create(event=event, realname=realname,
+                                 phone=phone, email=email, sign=sign)
+            return render(request, "add_guest.html", {"user": username, "form": form, "success": "添加嘉宾成功!"})
+
+    else:
+        form = AddGuestForm()
+
+    return render(request, "add_guest.html", {"user": username, "form": form})
+
+
 # 嘉宾手机号的查询
-# @login_required
+@login_required
 def search_phone(request):
     username = request.session.get('username', '')
     search_phone = request.GET.get("phone", "")
@@ -99,29 +156,55 @@ def search_phone(request):
                                                  "phone": search_phone})
 
 
+# 签到页面
 @login_required
 def sign_index(request, event_id):
+    print(event_id)
     event = get_object_or_404(Event, id=event_id)
-    return render(request, 'sign_index.html', {'event': event})
+    guests = Guest.objects.filter(event_id=event_id)
+    guest_data = str(len(guests))  # 签到人数
+    sign_data = 0  # 已签到人数
+    for guest in guests:
+        if guest.sign == True:
+            sign_data += 1
+    return render(request, 'sign_index.html', {'event': event, 'guest': guest_data,
+                                               'sign': sign_data})
 
 
 # 签到动作
-# @login_required
+@login_required
 def sign_index_action(request, event_id):
     event = get_object_or_404(Event, id=event_id)
+    guests = Guest.objects.filter(event_id=event_id)
+    guest_data = str(len(guests))
+    sign_data = 0
+    for guest in guests:
+        if guest.sign == True:
+            sign_data += 1
+
     phone = request.POST.get('phone', '')
     result = Guest.objects.filter(phone=phone)
     if not result:
-        return render(request, 'sign_index.html', {'event': event, 'hint': 'phone error.'})
+        return render(request, 'sign_index.html',
+                      {'event': event, 'hint': 'phone error.', 'guest': guest_data, 'sign': sign_data})
+
     result = Guest.objects.filter(phone=phone, event_id=event_id)
     if not result:
-        return render(request, 'sign_index.html', {'event': event, 'hint': 'event id or phone error.'})
-    result = Guest.objects.get(phone=phone, event_id=event_id)
+        return render(request, 'sign_index.html',
+                      {'event': event, 'hint': 'event id or phone error.', 'guest': guest_data, 'sign': sign_data})
+
+    result = Guest.objects.get(event_id=event_id, phone=phone)
+
     if result.sign:
-        return render(request, 'sign_index.html', {'event': event, 'hint': "user has sign in."})
+        return render(request, 'sign_index.html',
+                      {'event': event, 'hint': "user has sign in.", 'guest': guest_data, 'sign': sign_data})
     else:
-        Guest.objects.filter(phone=phone, event_id=event_id).update(sign='1')
-        return render(request, 'sign_index.html', {'event': event, 'hint': 'sign in success!', 'guest': result})
+        Guest.objects.filter(event_id=event_id, phone=phone).update(sign='1')
+        return render(request, 'sign_index.html', {'event': event, 'hint': 'sign in success!',
+                                                   'user': result,
+                                                   'guest': guest_data,
+                                                   'sign': str(int(sign_data) + 1)
+                                                   })
 
 
 # 退出登录
